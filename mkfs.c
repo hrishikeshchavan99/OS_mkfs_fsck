@@ -248,10 +248,10 @@ int main(int argc, char *argv[]) {
 	dirent1.inode = 2;
 	dirent1.rec_len = 12;
 	dirent1.name_len = 1;
-	strcpy(dirent1->name[0],".");
+	strcpy(dirent1->name,".\0\0\0");
 
 	dirent2.inode = 11;
 	dirent2.rec_len = 12;
 	dirent2.name_len = 2;
-	strcpy(dirent2->name[0],"..")
+	strcpy(dirent2->name,"..\0\0");
 
