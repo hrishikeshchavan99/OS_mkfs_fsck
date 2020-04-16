@@ -9,6 +9,25 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+
+/*
+changes
+
+1. number of elements in the i_block array is variable, to calculate, size/blocksize.
+2. i_blocks = i_size/512
+3. i_mode value?? 
+4. should we make separate function? set_inode?
+5. i_blocks[] must be inside and is specific to that particular inode, if chya aat ghyayla lagel. tu kahi goshti kay kelet tyat mala kalat nahiye mhnun mi 
+change karat nahiye ata he
+6. struct ext2_dir_entry_2 is used instead of the previous one
+7. exact position of the data blocks
+		
+
+
+
+
+
+*/
 int main(int argc, char *argv[]) {
 	int fd = open(argv[1], O_RDONLY); // argv[1] = /dev/sdb1 
 	
@@ -16,8 +35,9 @@ int main(int argc, char *argv[]) {
 	struct ext2_super_block sb; 
 	struct ext2_group_desc bgdesc;
 	struct ext2_inode inode;
-	struct ext2_dir_entry dirent1, dirent2;
+	struct ext2_dir_entry_2 dirent1, dirent2;
 	unsigned int block_size;
+
 	if(fd == -1) {
 		perror("error:");
 		exit(errno);
@@ -184,7 +204,7 @@ int main(int argc, char *argv[]) {
 			bgdesc.bg_inode_bitmap_csum_lo = 0;
 			bgdesc.bg_itable_unused = 0;
 			bgdesc.bg_checksum = 0;
-			write(fd, );
+			write(fd, bgdesc, sizeof(ext2_group_desc));
 		}	
 	}
 // need to define inode no
@@ -195,7 +215,7 @@ int main(int argc, char *argv[]) {
 		inodes.i_ctime;	
 		inodes.i_mtime;	
 		inodes.i_links_count = 3;	
-		inodes.i_blocks = 1 * bs / 512;	
+		inodes.i_blocks = inodes.i_size / 512;	
 	}
 	if (inode_no == 11){	
 		inodes.i_mode = 16832;
@@ -204,7 +224,7 @@ int main(int argc, char *argv[]) {
 		inodes.i_ctime;	
 		inodes.i_mtime;	
 		inodes.i_links_count = 2;	
-		inodes.i_blocks = 4 * bs / 512;	
+		inodes.i_blocks = inodes.i_size / 512;	
 	}
 		inodes.i_uid = 0;		
 		inodes.i_dtime = 0;	
@@ -244,14 +264,53 @@ int main(int argc, char *argv[]) {
 		} hurd2;
 	} osd2;				
 
-
-	dirent1.inode = 2;
-	dirent1.rec_len = 12;
-	dirent1.name_len = 1;
-	strcpy(dirent1->name,".\0\0\0");
-
-	dirent2.inode = 11;
-	dirent2.rec_len = 12;
-	dirent2.name_len = 2;
-	strcpy(dirent2->name,"..\0\0");
-
+	// to be written for inode 2
+	
+	set_dir_entry(int inode, int record_length, int name_length, int ftype, char * str){
+		dirent.inode = inode;
+		dirent.rec_len = record_length;
+		dirent.name_len = name_length;
+		dirent.file_type = ftype;
+		strcpy(dirent->name,str);
+	}
+	
+	//for inode 2 (following part is to be written for group 0 only)
+	
+	//go to the block descriptor and read it
+	
+	lseek(fd, block_size, SEEK_SET);
+	read(fd, &bgdesc, sizeof(struct ext2_group_desc));
+	
+	//read inodetable location and read inode
+	
+	lseek(fd, bgdesc.bg_inode_table * block_size + 2*sizeof(struct ext2_inode), SEEK_SET);
+	read(fd, &inode, sizeof(struct ext2_inode));
+	
+	//goto data block location and write structures
+	lseek(fd, inode.i_block[0] * block_size, SEEK_SET);
+	set_dir_entry(2, 12, 1, 2, ".\0\0\0");	
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
+	
+	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
+	set_dir_entry(2, 12, 2, 2, "..\0\0");
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));		
+	
+	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
+	set_dir_entry(2, 20, 10, 2,"lost+found\0\0");	
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
+	
+	
+	//for inode 11
+	
+	//read inodetable location and read inode
+	
+	lseek(fd, bgdesc.bg_inode_table * block_size + 11*sizeof(struct ext2_inode), SEEK_SET);
+	read(fd, &inode, sizeof(struct ext2_inode));
+	
+	lseek(fd, inode.i_block[0] * block_size, SEEK_SET);
+	set_dir_entry(11, 12, 1, 2, ".\0\0\0");
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
+	
+	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
+	set_dir_entry(2, 12, 2, 2, "..\0\0");
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
