@@ -21,12 +21,8 @@ changes
 change karat nahiye ata he
 6. struct ext2_dir_entry_2 is used instead of the previous one
 7. exact position of the data blocks
-		
-
-
-
-
-
+8. use getopt
+option -b, using that set it to the bs
 */
 int main(int argc, char *argv[]) {
 	int fd = open(argv[1], O_RDONLY); // argv[1] = /dev/sdb1 
@@ -35,7 +31,7 @@ int main(int argc, char *argv[]) {
 	struct ext2_super_block sb; 
 	struct ext2_group_desc bgdesc;
 	struct ext2_inode inode;
-	struct ext2_dir_entry_2 dirent1, dirent2;
+	struct ext2_dir_entry_2 dirent;
 	unsigned int block_size;
 
 	if(fd == -1) {
