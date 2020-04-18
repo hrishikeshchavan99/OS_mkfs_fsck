@@ -24,6 +24,16 @@ change karat nahiye ata he
 8. use getopt
 option -b, using that set it to the bs
 */
+
+
+	set_dir_entry(int inode, int record_length, int name_length, int ftype, char * str){
+		dirent.inode = inode;
+		dirent.rec_len = record_length;
+		dirent.name_len = name_length;
+		dirent.file_type = ftype;
+		strcpy(dirent->name,str);
+	}
+	
 int ispowerof(int n, int k){
 	while (n != 1){
 		if(n % k != 0)
@@ -281,13 +291,6 @@ int main(int argc, char *argv[]) {
 
 	// to be written for inode 2
 	
-	set_dir_entry(int inode, int record_length, int name_length, int ftype, char * str){
-		dirent.inode = inode;
-		dirent.rec_len = record_length;
-		dirent.name_len = name_length;
-		dirent.file_type = ftype;
-		strcpy(dirent->name,str);
-	}
 	
 	//for inode 2 (following part is to be written for group 0 only)
 	
