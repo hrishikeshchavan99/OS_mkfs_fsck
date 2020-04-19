@@ -38,7 +38,7 @@ int ispowerof(int n, int k){
 }
 
 int main(int argc, char *argv[]) {
-	int fd = open(argv[1], O_RDONLY); // argv[1] = /dev/sdb1 
+	int fd = open(argv[1], O_RDONLY | O_WRONLY); // argv[1] = /dev/sdb1 
 	
 	int count, bs = 4096, i = 0;
 	struct ext2_super_block sb; 
