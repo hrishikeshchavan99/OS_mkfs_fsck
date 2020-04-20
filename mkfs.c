@@ -12,20 +12,35 @@
 #include <math.h>
 #include <getopt.h>
 
-int block_size = 4096;
+int block_size;
 int no_of_groups;
 int gdt_blocksize;
 
+int to_decimal(int n){
+
+	int result = 0, i = 0;
+
+	while(n != 0){
+		result += pow(2, i);
+		++i;
+		--n;
+	}
+
+	return result;
+}
+
 int ispowerof(int n, int k){
+	
 	while (n != 1){
 		if(n % k != 0)
         		return 0;
 		n = n / k;
 	}
-    	return 1;
+    
+	return 1;
 }
 
-int read_bgdesc(FILE* fd, struct ext2_group_desc* bgdesc, int group_no){	
+int read_bgdesc(int fd, struct ext2_group_desc* bgdesc, int group_no){	
 
 	lseek(fd, block_size + group_no * sizeof(struct ext2_group_desc), SEEK_SET);
 	read(fd, &bgdesc, sizeof(struct ext2_group_desc));
@@ -33,7 +48,7 @@ int read_bgdesc(FILE* fd, struct ext2_group_desc* bgdesc, int group_no){
 	return 0;
 }	
 	
-int duplicate_super_gdt(FILE * fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
+int duplicate_super_gdt(int fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
 	
 	for (int block_group = 1; block_group < no_of_groups; block_group++){		
 	
@@ -53,22 +68,32 @@ int duplicate_super_gdt(FILE * fd, struct ext2_super_block sb, struct ext2_group
 								
 		}				
 	}	
+	
 	return 0;
 }
 
 int set_dir_entry(struct ext2_dir_entry_2* dirent, int inode, int record_length, int name_length, int ftype, char * str){
-		dirent->inode = inode;
-		dirent->rec_len = record_length;
-		dirent->name_len = name_length;
-		dirent->file_type = ftype;
-		strcpy(dirent->name,str);
-		return 0;
+	
+	dirent->inode = inode;
+	dirent->rec_len = record_length;
+	dirent->name_len = name_length;
+	dirent->file_type = ftype;
+	strcpy(dirent->name,str);
+	return 0;
 }
 	
-int set_datablock_bitmap(FILE* fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
+int set_datablock_bitmap(int fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
+	
+	int no_full_1s;
+	int extra_1s;
+	int no_full_0s;
+	int decimal_number;
+	int full_0s = 0;
+	int full_1s = 0xFFFFFFFF;
+	int total_int = sb.s_inodes_per_group / 32;		 
 	
 	for(int block_group = 0; block_group < no_of_groups; block_group++){
-		
+			
 		read_bgdesc(fd, &bgdesc, block_group);	
 		lseek(fd, bgdesc.bg_block_bitmap * block_size, SEEK_SET);
 				
@@ -81,30 +106,42 @@ int set_datablock_bitmap(FILE* fd, struct ext2_super_block sb, struct ext2_group
 		else {
 			value = 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);
 		}
+				
+		no_full_1s = value / 32;
+		for(int i = 0; i < no_full_1s; i++){
+			write(fd, &full_1s, sizeof(full_1s));
+		}
+		extra_1s = value % 32;
+		if(extra_1s){
+			decimal_number = to_decimal(extra_1s);
+			write(fd, &decimal_number, sizeof(decimal_number));	
+		}
+		no_full_0s = (total_int - ceil((float) value/32)); 
+		for(int i = 0; i < no_full_0s; i++){
+			write(fd, &full_0s, sizeof(full_0s));
+		}
 	}
 	
 }
 
-int set_inode_bitmap(FILE* fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
+int set_inode_bitmap(int fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
 	
 	int value;
-	int total_int = ceil((float)sb.s_inodes_per_group / 32);		//calculates the total number of integers required
-	//int remainder = sb.s_inodes_per_group % 32;					//do we need to consider this case	
+	int total_int = sb.s_inodes_per_group / 32;		
 	
 	read_bgdesc(fd, &bgdesc, 0)
 	lseek(fd, bgdesc.bg_inode_bitmap * block_size, SEEK_SET);
 	
-	for(int i = 0; i < total_int-1; i++){
-		value = 0x00000000;
-		write(fd, &value, sizeof(value));
-	}
 	value = 0x000007FF;
 	write(fd, &value, sizeof(value));
-	
+	value = 0x00000000;
+	for(int i = 0; i < total_int-1; i++){
+		write(fd, &value, sizeof(value));
+	}
+	value = 0x00000000;
 	for(int i = 1; i < no_of_groups; i++){
 		read_bgdesc(fd, &bgdesc, i)
 		lseek(fd, bgdesc.bg_inode_bitmap * block_size, SEEK_SET);
-		value = 0x00000000;
 		for(int j = 0; j < total_int; j++){
 			write(fd, &value, sizeof(value));
 		}
@@ -112,7 +149,7 @@ int set_inode_bitmap(FILE* fd, struct ext2_super_block sb, struct ext2_group_des
 	return 0;
 }
 
-int write_inodetable(FILE* fd, int inode_no, struct ext2_super_block sb, struct ext2_group_desc bgdesc, struct ext2_inode* inode){
+int write_inodetable(int fd, int inode_no, struct ext2_super_block sb, struct ext2_group_desc bgdesc, struct ext2_inode* inode){
 	
 	if (inode_no == 2){	
 		inode->i_mode = 16877;
@@ -183,7 +220,7 @@ int write_inodetable(FILE* fd, int inode_no, struct ext2_super_block sb, struct 
 	return 0;
 }
 
-int write_datablocks(FILE* fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc, struct ext2_inode inode, struct ext2_dir_entry_2* dirent){
+int write_datablocks(int fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc, struct ext2_inode inode, struct ext2_dir_entry_2* dirent){
 
 	read_bgdesc(fd, &bgdesc, 0);
 	lseek(fd, bgdesc.bg_inode_table * block_size + 2*sizeof(struct ext2_inode), SEEK_SET);
@@ -406,7 +443,6 @@ int main(int argc, char *argv[]) {
 	}
 			
 	}
-	
 	duplicate_super_gdt(fd, block_size, sb, bgdesc);
 	set_datablock_bitmap(fd, sb, bgdesc);
 	set_inode_bitmap(fd, sb, bgdesc);
@@ -414,6 +450,4 @@ int main(int argc, char *argv[]) {
 	write_inodetable(fd, 11, sb, bgdesc, &inode);	
 	write_datablocks(fd, sb, bgdesc, inode, &dirent);
 
-}	
-	
-	
+}		
