@@ -40,7 +40,26 @@ int main(int argc, char *argv[]) {
 	unsigned int inodes_count = sb.s_inodes_per_group * no_of_groups;
 	if (sb.s_inodes_count == inodes_count)
 		//ok
-	
+	if (sb.s_blocks_per_group == bs * 8);
+	if (sb.s_blocks_count == p.size / bs);				
+
+//	unsigned int no_of_groups = ceil((float)sb.s_blocks_count / sb.s_blocks_per_group);
+														
+	unsigned int inode_bpg = bs / 8;	
+												
+	if (sb.s_inodes_per_group == inode_bpg * bs / sb.s_inode_size);
+
+	if (sb.s_inodes_count == sb.s_inodes_per_group * no_of_groups);
+		
+	if (sb.s_r_blocks_count == (5 * sb.s_blocks_count) / 100);
+
+	if (sb.s_free_blocks_count = );
+
+	if (sb.s_free_inodes_count == sb.s_inodes_count - 11);
+	if (sb.s_log_block_size == bs >> 11);	
+	if (sb.s_log_cluster_size == bs >> 11);
+	if (sb.s_clusters_per_group == sb.s_blocks_per_group);		
+
 
 
 }
