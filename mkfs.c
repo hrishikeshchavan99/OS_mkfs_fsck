@@ -15,6 +15,7 @@
 int block_size;
 int no_of_groups;
 int gdt_blocksize;
+int freebl_usingbgdesc;
 
 int to_decimal(int n){
 
@@ -253,7 +254,7 @@ int write_datablocks(int fd, struct ext2_super_block sb, struct ext2_group_desc 
 int main(int argc, char *argv[]) {
 	
 	int c;
-	imt dummy = 0;
+	int dummy = 0;
 	struct ext2_super_block sb; 
 	struct ext2_group_desc bgdesc;
 	struct ext2_inode inode;
@@ -281,8 +282,7 @@ int main(int argc, char *argv[]) {
 	long long int p_size = lseek(fd, 0, SEEK_END);
 	lseek(fd, 1024, SEEK_SET);
 	
-	 //the superblock
-	{
+	//the superblock
 	sb.s_blocks_per_group = block_size * 8;	/* # Blocks per group */
 	sb.s_blocks_count = ceil(p_size / block_size);				
 
@@ -296,7 +296,10 @@ int main(int argc, char *argv[]) {
 	sb.s_r_blocks_count = (5 * sb.s_blocks_count) / 100;	   /* Reserved blocks count */
 	sb.s_free_blocks_count = 			/* Free blocks count */
 	sb.s_free_inodes_count = sb.s_inodes_count - 11;	/* Free inodes count */
-	sb.s_first_data_block = 0;    // 	/* First Data Block */
+	if(block_size > 1024)
+		sb.s_first_data_block = 0;    // 	/* First Data Block */
+	else
+		sb.s_first_data_block = 1;
 	sb.s_log_block_size = block_size >> 11;	/* Block size */ //blocksize = 1024 << s_log_block_size
 	sb.s_log_cluster_size = block_size >> 11;	/* Allocation cluster size */
 	sb.s_clusters_per_group = sb.s_blocks_per_group;	/* # Fragments per group */	
@@ -304,7 +307,7 @@ int main(int argc, char *argv[]) {
 	sb.s_wtime = time(NULL);		/* Write time */
 	sb.s_mnt_count = 0;		/* Mount count */
 	sb.s_max_mnt_count = -1;	/* Maximal mount count */
-	sb.sb.s_magic = EXT2_SUPER_MAGIC;		/* Magic signature */
+	sb.s_magic = EXT2_SUPER_MAGIC;		/* Magic signature */
 	sb.s_state = 1;		/* File system state */
 	sb.s_errors = 1;		/* Behaviour when detecting errors */
 	sb.s_minor_rev_level = 0;	/* minor revision level */
@@ -320,8 +323,8 @@ int main(int argc, char *argv[]) {
 	sb.s_feature_incompat = 2;	/* incompatible feature set */
 	sb.s_feature_ro_compat = 3;  	/* readonly-compatible feature set */
 	uuid_generate(sb->s_uuid);		/* 128-bit uuid for volume */
-	sb -> s_volume_name[0] = '\0';	/* volume name */
-	sb -> s_last_mounted[0] = '\0';	/* directory where last mounted */
+	sb.s_volume_name[0] = '\0';	/* volume name */
+	sb.s_last_mounted[0] = '\0';	/* directory where last mounted */
 	sb.s_algorithm_usage_bitmap = 0; /* For compression */
 	sb.s_prealloc_blocks = 0;	/* Nr of blocks to try to preallocate*/
 	sb.s_prealloc_dir_blocks = 0;	/* Nr to preallocate for dirs */
@@ -391,14 +394,11 @@ int main(int argc, char *argv[]) {
 	
 	write(fd, sb, sizeof(ext2_super_block));
 	
-	}
 	// the block group descriptor table
-	{
-	
 	int reqsize_gdt = no_of_groups * 32;
 	gdt_blocksize = ceil((float)reqsize_gdt / block_size);
 
-	
+	freebl_usingbgdesc = 0;
 	for(int block_group = 0; i < no_of_groups; block_group++){
 		
 		long long int initial = block_group * s_blocks_per_group;
@@ -415,12 +415,15 @@ int main(int argc, char *argv[]) {
 		
 		if(block_group == 0) {
 			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 8;
+			freebl_usingbgdesc += bgdesc.bg_free_blocks_count;
 		}
 		else if(block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {
 			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 3;
+			freebl_usingbgdesc += bgdesc.bg_free_blocks_count;
 		}
 		else{
 			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 2; 
+			freebl_usingbgdesc += bgdesc.bg_free_blocks_count;
 		}
 		
 		if (block_group == 0){		
@@ -442,12 +445,15 @@ int main(int argc, char *argv[]) {
 		write(fd, bgdesc, sizeof(ext2_group_desc);
 	}
 			
-	}
 	duplicate_super_gdt(fd, block_size, sb, bgdesc);
 	set_datablock_bitmap(fd, sb, bgdesc);
 	set_inode_bitmap(fd, sb, bgdesc);
 	write_inodetable(fd, 2, sb, bgdesc, &inode);
 	write_inodetable(fd, 11, sb, bgdesc, &inode);	
 	write_datablocks(fd, sb, bgdesc, inode, &dirent);
-
+	
+	close(fd);
+	
+	return 0;
+	
 }		
