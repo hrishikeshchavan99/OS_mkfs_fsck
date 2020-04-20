@@ -10,24 +10,12 @@
 #include <time.h>
 #include <uuid.h>
 #include <math.h>
+#include <getopt.h>
 
-/*
-1. number of elements in the i_block array is variable, to calculate, size/blocksize.
-5. i_blocks[] must be inside and is specific to that particular inode, if chya aat ghyayla lagel. tu kahi goshti kay kelet tyat mala kalat nahiye mhnun mi 
-change karat nahiye ata he
-8. use getopt
-option -b, using that set it to the bs
-*/
+int block_size = 4096;
+int no_of_groups;
+int gdt_blocksize;
 
-int set_dir_entry(int inode, int record_length, int name_length, int ftype, char * str){
-		dirent.inode = inode;
-		dirent.rec_len = record_length;
-		dirent.name_len = name_length;
-		dirent.file_type = ftype;
-		strcpy(dirent->name,str);
-		return 0;
-}
-	
 int ispowerof(int n, int k){
 	while (n != 1){
 		if(n % k != 0)
@@ -37,15 +25,215 @@ int ispowerof(int n, int k){
     	return 1;
 }
 
-int main(int argc, char *argv[]) {
-	int fd = open(argv[1], O_RDONLY | O_WRONLY); // argv[1] = /dev/sdb1 
+int read_bgdesc(FILE* fd, struct ext2_group_desc* bgdesc, int group_no){	
+
+	lseek(fd, block_size + group_no * sizeof(struct ext2_group_desc), SEEK_SET);
+	read(fd, &bgdesc, sizeof(struct ext2_group_desc));
 	
-	int count, bs = 4096, i = 0;
+	return 0;
+}	
+	
+int duplicate_super_gdt(FILE * fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
+	
+	for (int block_group = 1; block_group < no_of_groups; block_group++){		
+	
+		if (block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)){		
+		
+			lseek(fd, block_group * sb.s_blocks_per_group * block_size, SEEK_SET);
+			write(fd, sb, sizeof(ext2_super_block));
+			
+			for(int i = 0; i < no_of_groups; i++){
+				
+				read_bgdesc(fd, block_size, &bgdesc, i);
+				lseek(fd, block_group * sb.s_blocks_per_group * block_size + block_size,SEEK_SET);
+				lseek(fd, i * sizeof(struct ext2_group_desc), SEEK_CUR);
+				write(fd, bgdesc, sizeof(ext2_group_desc));	
+				
+			}
+								
+		}				
+	}	
+	return 0;
+}
+
+int set_dir_entry(struct ext2_dir_entry_2* dirent, int inode, int record_length, int name_length, int ftype, char * str){
+		dirent->inode = inode;
+		dirent->rec_len = record_length;
+		dirent->name_len = name_length;
+		dirent->file_type = ftype;
+		strcpy(dirent->name,str);
+		return 0;
+}
+	
+int set_datablock_bitmap(FILE* fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
+	
+	for(int block_group = 0; block_group < no_of_groups; block_group++){
+		
+		read_bgdesc(fd, &bgdesc, block_group);	
+		lseek(fd, bgdesc.bg_block_bitmap * block_size, SEEK_SET);
+				
+		if(block_group == 0){
+			value = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) + 5;
+		}
+		else if (block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)){
+			value = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);
+		}
+		else {
+			value = 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);
+		}
+	}
+	
+}
+
+int set_inode_bitmap(FILE* fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
+	
+	int value;
+	int total_int = ceil((float)sb.s_inodes_per_group / 32);		//calculates the total number of integers required
+	//int remainder = sb.s_inodes_per_group % 32;					//do we need to consider this case	
+	
+	read_bgdesc(fd, &bgdesc, 0)
+	lseek(fd, bgdesc.bg_inode_bitmap * block_size, SEEK_SET);
+	
+	for(int i = 0; i < total_int-1; i++){
+		value = 0x00000000;
+		write(fd, &value, sizeof(value));
+	}
+	value = 0x000007FF;
+	write(fd, &value, sizeof(value));
+	
+	for(int i = 1; i < no_of_groups; i++){
+		read_bgdesc(fd, &bgdesc, i)
+		lseek(fd, bgdesc.bg_inode_bitmap * block_size, SEEK_SET);
+		value = 0x00000000;
+		for(int j = 0; j < total_int; j++){
+			write(fd, &value, sizeof(value));
+		}
+	}
+	return 0;
+}
+
+int write_inodetable(FILE* fd, int inode_no, struct ext2_super_block sb, struct ext2_group_desc bgdesc, struct ext2_inode* inode){
+	
+	if (inode_no == 2){	
+		inode->i_mode = 16877;
+		inode->i_size = block_size;		
+		inode->i_links_count = 3;			
+	}
+	if (inode_no == 11){	
+		inode->i_mode = 16832;
+		inode->i_size = 4 * block_size;			
+		inode->i_links_count = 2;		
+	}
+	
+	inode->i_blocks = inode.i_size / 512;
+	inode->i_atime = time(NULL);	
+	inode->i_ctime = time(NULL);	
+	inode->i_mtime = time(NULL);	
+	inode->i_uid = 0;		
+	inode->i_dtime = 0;	
+	inode->i_gid = 0;	
+	inode->i_flags = 0;	
+		
+	union {
+		struct {
+			inode->l_i_version = 0; 
+		} linux1;
+		struct {
+			inode->h_i_translator = 0;
+		} hurd1;
+	} osd1;				
+	
+	if (inode_no == 2){			
+		inode->i_block[0] = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size); 
+	}
+	else if (inode_no == 11){
+		inode->i_block[0] = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) + 1;    
+		inode->i_block[1] = inode.i_block[0] + 1;	
+		inode->i_block[2] = inode.i_block[0] + 2;	
+		inode->i_block[3] = inode.i_block[0] + 3;
+	}
+
+	inode->i_generation = 0;	
+	inode->i_file_acl = 0;	
+	inode->i_size_high = 0;
+	inode->i_faddr = 0;	
+	union {
+		struct {
+			inode->l_i_blocks_hi = 0;
+			inode->l_i_file_acl_high = 0;
+			inode->l_i_uid_high = 0;	
+			inode->l_i_gid_high = 0;	
+			inode->l_i_checksum_lo = 0; 
+			inode->l_i_reserved = 0;
+		} linux2;
+		struct {
+			inode->h_i_frag = 0;	
+			inode->h_i_fsize = 0;	
+			inode->h_i_mode_high = 0;
+			inode->h_i_uid_high = 0;
+			inode->h_i_gid_high = 0;
+			inode->h_i_author = 0;
+		} hurd2;
+	} osd2;
+
+	read_bgdesc(fd, &bgdesc, 0);
+	lseek(fd, bgdesc.bg_inode_table * block_size + (inode_no - 1) * 256, SEEK_SET);
+	write(fd, inode, sizeof(struct ext2_inode));
+
+	return 0;
+}
+
+int write_datablocks(FILE* fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc, struct ext2_inode inode, struct ext2_dir_entry_2* dirent){
+
+	read_bgdesc(fd, &bgdesc, 0);
+	lseek(fd, bgdesc.bg_inode_table * block_size + 2*sizeof(struct ext2_inode), SEEK_SET);
+	read(fd, &inode, sizeof(struct ext2_inode));
+
+	lseek(fd, inode.i_block[0] * block_size, SEEK_SET);
+	set_dir_entry(dirent, 2, 12, 1, 2, ".\0\0\0");	
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
+	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
+	set_dir_entry(dirent, 2, 12, 2, 2, "..\0\0");
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));		
+	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
+	set_dir_entry(dirent, 2, 20, 10, 2,"lost+found\0\0");	
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
+	
+	lseek(fd, bgdesc.bg_inode_table * block_size + 10*2*sizeof(struct ext2_inode), SEEK_SET);
+	read(fd, &inode, sizeof(struct ext2_inode));
+	
+	lseek(fd, inode.i_block[0] * block_size, SEEK_SET);
+	set_dir_entry(dirent, 11, 12, 1, 2, ".\0\0\0");
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));	
+	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
+	set_dir_entry(dirent, 2, 12, 2, 2, "..\0\0");
+	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
+	
+	return 0;
+
+}
+
+int main(int argc, char *argv[]) {
+	
+	int c;
+	imt dummy = 0;
 	struct ext2_super_block sb; 
 	struct ext2_group_desc bgdesc;
 	struct ext2_inode inode;
 	struct ext2_dir_entry_2 dirent;
-	unsigned int block_size;
+	
+	
+	while ((c = getopt(argc, argv, "b")) != -1){
+		if(c){
+			block_size = atoi(argv[optind]);
+			dummy = 1;
+		}
+	}
+	if(dummy == 0){
+		block_size = 4096;
+	}
+	
+	int fd = open(argv[1], O_RDONLY | O_WRONLY); 
 
 
 	if(fd == -1) {
@@ -53,30 +241,27 @@ int main(int argc, char *argv[]) {
 		exit(errno);
 	}
 	
-	int curr_pos = lseek(fd, 0, SEEK_CUR);
-	int p_size;
-	p_size = lseek(fd, 0, SEEK_END);
-	lseek(fd, curr_pos, SEEK_SET);	
+	long long int p_size = lseek(fd, 0, SEEK_END);
+	lseek(fd, 1024, SEEK_SET);
+	
+	 //the superblock
+	{
+	sb.s_blocks_per_group = block_size * 8;	/* # Blocks per group */
+	sb.s_blocks_count = ceil(p_size / block_size);				
 
-	lseek(fd, 1024, SEEK_CUR);
-
-		
-	sb.s_blocks_per_group = bs * 8;	/* # Blocks per group */
-	sb.s_blocks_count = p.size / bs;				
-
-	unsigned int no_of_groups = ceil((float)sb.s_blocks_count / sb.s_blocks_per_group);
+	no_of_groups = ceil((float)sb.s_blocks_count / sb.s_blocks_per_group);
 														
-	unsigned int inode_bpg = bs / 8;	
-												
+	unsigned int inode_bpg = block_size / 8;	
+														
 	sb.s_inode_size = 256;		/* size of inode structure */
-	sb.s_inodes_per_group = inode_bpg * bs / sb.s_inode_size;	/* # Inodes per group */
+	sb.s_inodes_per_group = inode_bpg * block_size / sb.s_inode_size;	/* # Inodes per group */
 	sb.s_inodes_count = sb.s_inodes_per_group * no_of_groups;		
 	sb.s_r_blocks_count = (5 * sb.s_blocks_count) / 100;	   /* Reserved blocks count */
 	sb.s_free_blocks_count = 			/* Free blocks count */
 	sb.s_free_inodes_count = sb.s_inodes_count - 11;	/* Free inodes count */
 	sb.s_first_data_block = 0;    // 	/* First Data Block */
-	sb.s_log_block_size = bs >> 11;	/* Block size */ //blocksize = 1024 << s_log_block_size
-	sb.s_log_cluster_size = bs >> 11;	/* Allocation cluster size */
+	sb.s_log_block_size = block_size >> 11;	/* Block size */ //blocksize = 1024 << s_log_block_size
+	sb.s_log_cluster_size = block_size >> 11;	/* Allocation cluster size */
 	sb.s_clusters_per_group = sb.s_blocks_per_group;	/* # Fragments per group */	
 	sb.s_mtime = 0;		/* Mount time */
 	sb.s_wtime = time(NULL);		/* Write time */
@@ -169,15 +354,20 @@ int main(int argc, char *argv[]) {
 	
 	write(fd, sb, sizeof(ext2_super_block));
 	
+	}
+	// the block group descriptor table
+	{
 	
-	//block group descriptor table
+	int reqsize_gdt = no_of_groups * 32;
+	gdt_blocksize = ceil((float)reqsize_gdt / block_size);
+
 	
 	for(int block_group = 0; i < no_of_groups; block_group++){
 		
 		long long int initial = block_group * s_blocks_per_group;
 		
 		if (block_group == 0 || block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {
-			bgdesc.bg_block_bitmap = initial + 1 + 1 + sb.s_reserved_gdt_blocks;
+			bgdesc.bg_block_bitmap = initial + 1 + gdt_blocksize + sb.s_reserved_gdt_blocks;
 		} else{
 			bg.desc.bg_block_bitmap =  initial;
 		}
@@ -187,22 +377,22 @@ int main(int argc, char *argv[]) {
 		bgdesc.bg_inode_table = bgdesc.bg_inode_bitmap + 1;
 		
 		if(block_group == 0) {
-			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - sb.s_reserved_gdt_blocks - sb.s_free_inodes_count - 10;
+			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 8;
 		}
 		else if(block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {
-			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - sb.s_reserved_gdt_blocks - sb.s_free_inodes_count - 4;
+			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 3;
 		}
 		else{
-			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - sb.s_free_inodes_count - 2; 
+			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 2; 
 		}
 		
 		if (block_group == 0){		
 			bgdesc.bg_used_dirs_count = 2;
-			bgdesc.bg_free_inodes_count = sb.s_inodes_count - 11;
+			bgdesc.bg_free_inodes_count = sb.s_inodes_per_group - 11;
 		}			
 		else { 
 			bgdesc.bg_used_dirs_count = 0;
-			bgdesc.bg_free_inodes_count = sb.s_inodes_count;			
+			bgdesc.bg_free_inodes_count = sb.s_inodes_per_group;			
 		}
 		
 		bgdesc.bg_flags = 0;
@@ -215,146 +405,15 @@ int main(int argc, char *argv[]) {
 		write(fd, bgdesc, sizeof(ext2_group_desc);
 	}
 			
-	// duplicates the superblock and the group descriptor table
-	
-	for (block_group = 1; block_group < no_of_groups; block_group++){
-		
-		if (block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)){	
-			
-			lseek(fd, block_group * sb.s_blocks_per_group * bs, SEEK_SET);
-			
-			write(fd, sb, sizeof(ext2_super_block));
-			write(fd, bgdesc, sizeof(ext2_group_desc);
-	
-		}
 	}
 	
-	
-	for(int block_group = 0; block_group < no_of_groups; block_group++){
-		
-		int value_to_be_written;
-		
-		lseek(fd, block_size, SEEK_SET);
-		read(fd, &bgdesc, sizeof(struct ext2_group_desc));
-	
-		lseek(fd, bgdesc.bg_block_bitmap * block_size, SEEK_SET);
-		
-		if(block_group == 0){
-			value_to_be_written = 
-		}
-		else if (){}
-		else {}
-	}
-	
-	int define_inodes();
-	int write_inodes();
-	
-	// we are directly writing inode 2 in the inode table. so we skip the place for inode 1 and write accordingly (inode no - 1 ) * 256
-	
-// need to define inode no
-	if (inode_no == 2){	
-		inodes.i_mode = 16877;
-		inodes.i_size = 1 * bs;		
-		inodes.i_links_count = 3;	
-			
-	}
-	if (inode_no == 11){	
-		inodes.i_mode = 16832;
-		inodes.i_size = 4 * bs;			
-		inodes.i_links_count = 2;		
-	}
-		inodes.i_blocks = inodes.i_size / 512;
-		inodes.i_atime = time(NULL);	
-		inodes.i_ctime = time(NULL);	
-		inodes.i_mtime = time(NULL);	
-		inodes.i_uid = 0;		
-		inodes.i_dtime = 0;	
-		inodes.i_gid = 0;	
-		inodes.i_flags = 0;	
-		
-	union {
-		struct {
-			inodes.l_i_version = 0; 
-		} linux1;
-		struct {
-			inodes.h_i_translator = 0;
-		} hurd1;
-	} osd1;				
-	
-	if (inode_no == 2){			
-		inodes.i_block[0] = 1 + 1 + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / bs);    // 2.15
-	}
-	else if (inode_no == 11){
-		inodes.i_block[0] = 1 + 1 + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / bs) + 1;    
-		inodes.i_block[1] = inodes.i_block[0] + 1;	
-		inodes.i_block[2] = inodes.i_block[0] + 2;	
-		inodes.i_block[3] = inodes.i_block[0] + 3;
-	}
+	duplicate_super_gdt(fd, block_size, sb, bgdesc);
+	set_datablock_bitmap(fd, sb, bgdesc);
+	set_inode_bitmap(fd, sb, bgdesc);
+	write_inodetable(fd, 2, sb, bgdesc, &inode);
+	write_inodetable(fd, 11, sb, bgdesc, &inode);	
+	write_datablocks(fd, sb, bgdesc, inode, &dirent);
 
-	inodes.i_generation = 0;	
-	inodes.i_file_acl = 0;	
-	inodes.i_size_high = 0;
-	inodes.i_faddr = 0;	
-	union {
-		struct {
-			inodes.l_i_blocks_hi = 0;
-			inodes.l_i_file_acl_high = 0;
-			inodes.l_i_uid_high = 0;	
-			inodes.l_i_gid_high = 0;	
-			inodes.l_i_checksum_lo = 0; 
-			inodes.l_i_reserved = 0;
-		} linux2;
-		struct {
-			inodes.h_i_frag = 0;	
-			inodes.h_i_fsize = 0;	
-			inodes.h_i_mode_high = 0;
-			inodes.h_i_uid_high = 0;
-			inodes.h_i_gid_high = 0;
-			inodes.h_i_author = 0;
-		} hurd2;
-	} osd2;				
-
-	// to be written for inode 2
-	
-	int write_inode2();
-	int write_inode11();
-	//for inode 2 (following part is to be written for group 0 only)
-	
-	//go to the block descriptor and read it
-	
-	lseek(fd, block_size, SEEK_SET);
-	read(fd, &bgdesc, sizeof(struct ext2_group_desc));
-	
-	//read inodetable location and read inode
-	
-	lseek(fd, bgdesc.bg_inode_table * block_size + 2*sizeof(struct ext2_inode), SEEK_SET);
-	read(fd, &inode, sizeof(struct ext2_inode));
-	
-	//goto data block location and write structures
-	lseek(fd, inode.i_block[0] * block_size, SEEK_SET);
-	set_dir_entry(2, 12, 1, 2, ".\0\0\0");	
-	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
-	
-	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
-	set_dir_entry(2, 12, 2, 2, "..\0\0");
-	write(fd, dirent, sizeof(struct ext2_dir_entry_2));		
-	
-	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
-	set_dir_entry(2, 20, 10, 2,"lost+found\0\0");	
-	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
+}	
 	
 	
-	//for inode 11
-	
-	//read inodetable location and read inode
-	
-	lseek(fd, bgdesc.bg_inode_table * block_size + 11*sizeof(struct ext2_inode), SEEK_SET);
-	read(fd, &inode, sizeof(struct ext2_inode));
-	
-	lseek(fd, inode.i_block[0] * block_size, SEEK_SET);
-	set_dir_entry(11, 12, 1, 2, ".\0\0\0");
-	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
-	
-	lseek(fd, dirent.rec_len - sizeof(struct ext2_dir_entry_2), SEEK_CUR);
-	set_dir_entry(2, 12, 2, 2, "..\0\0");
-	write(fd, dirent, sizeof(struct ext2_dir_entry_2));
