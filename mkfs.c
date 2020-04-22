@@ -16,7 +16,7 @@
 int block_size;
 int no_of_groups;
 int gdt_blocksize;
-int freebl_usingbgdesc;
+long long int freebl_usingbgdesc;
 
 int to_decimal(int n){
 
@@ -177,16 +177,6 @@ int write_inodetable(int fd, int inode_no, struct ext2_super_block sb, struct ex
 	inode->osd1.linux1.l_i_version = 0;
 	inode->osd1.hurd1.h_i_translator = 0;
 	
-	/*
-	union {
-		struct {
-			inode->l_i_version = 0; 
-		} linux1;
-		struct {
-			inode->h_i_translator = 0;
-		} hurd1;
-	} osd1;				
-	*/
 	if (inode_no == 2){			
 		inode->i_block[0] = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size); 
 	}
@@ -196,32 +186,12 @@ int write_inodetable(int fd, int inode_no, struct ext2_super_block sb, struct ex
 		inode->i_block[2] = inode->i_block[0] + 2;	
 		inode->i_block[3] = inode->i_block[0] + 3;
 	}
-
+	
 	inode->i_generation = 0;	
 	inode->i_file_acl = 0;	
 	inode->i_size_high = 0;
 	inode->i_faddr = 0;	
 	
-	/*
-	union {
-		struct {
-			inode->l_i_blocks_hi = 0;
-			inode->l_i_file_acl_high = 0;
-			inode->l_i_uid_high = 0;	
-			inode->l_i_gid_high = 0;	
-			inode->l_i_checksum_lo = 0; 
-			inode->l_i_reserved = 0;
-		} linux2;
-		struct {
-			inode->h_i_frag = 0;	
-			inode->h_i_fsize = 0;	
-			inode->h_i_mode_high = 0;
-			inode->h_i_uid_high = 0;
-			inode->h_i_gid_high = 0;
-			inode->h_i_author = 0;
-		} hurd2;
-	} osd2;
-*/
 	inode->osd2.linux2.l_i_blocks_hi = 0;
 	inode->osd2.linux2.l_i_file_acl_high= 0;
 	inode->osd2.linux2.l_i_uid_high = 0;
@@ -306,7 +276,7 @@ int main(int argc, char *argv[]) {
 	
 	//the superblock
 	sb.s_blocks_per_group = block_size * 8;	/* # Blocks per group */
-	sb.s_blocks_count = ceil(p_size / block_size);				
+	sb.s_blocks_count = (p_size / block_size);				
 
 	no_of_groups = ceil((float)sb.s_blocks_count / sb.s_blocks_per_group);
 														
@@ -316,7 +286,7 @@ int main(int argc, char *argv[]) {
 	sb.s_inodes_per_group = inode_bpg * block_size / sb.s_inode_size;	/* # Inodes per group */
 	sb.s_inodes_count = sb.s_inodes_per_group * no_of_groups;		
 	sb.s_r_blocks_count = (5 * sb.s_blocks_count) / 100;	   /* Reserved blocks count */
-	sb.s_free_blocks_count = 			/* Free blocks count */
+	sb.s_free_blocks_count = freebl_usingbgdesc; 			/* Free blocks count */
 	sb.s_free_inodes_count = sb.s_inodes_count - 11;	/* Free inodes count */
 	if(block_size > 1024)
 		sb.s_first_data_block = 0;    // 	/* First Data Block */
@@ -421,6 +391,7 @@ int main(int argc, char *argv[]) {
 	gdt_blocksize = ceil((float)reqsize_gdt / block_size);
 
 	freebl_usingbgdesc = 0;
+	long  long int tb;
 	for(int block_group = 0; block_group < no_of_groups; block_group++){
 		
 		long long int initial = block_group * sb.s_blocks_per_group;
@@ -436,13 +407,31 @@ int main(int argc, char *argv[]) {
 		bgdesc.bg_inode_table = bgdesc.bg_inode_bitmap + 1;
 		
 		if(block_group == 0) {
-			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 9;
+			if(block_group == no_of_groups-1){
+				tb = sb.s_blocks_count % sb.s_blocks_per_group;
+			}
+			else{
+				tb = sb.s_blocks_count;
+			}
+			bgdesc.bg_free_blocks_count = tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 9;
 		}
 		else if(block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {
-			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 3;
+			if(block_group == no_of_groups-1){
+				tb = sb.s_blocks_count % sb.s_blocks_per_group;
+			}
+			else{
+				tb = sb.s_blocks_count;
+			}
+			bgdesc.bg_free_blocks_count = tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 3;
 		}
 		else{
-			bgdesc.bg_free_blocks_count = sb.s_blocks_per_group - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 2; 
+			if(block_group == no_of_groups-1){
+				tb = sb.s_blocks_count % sb.s_blocks_per_group;
+			}
+			else{
+				tb = sb.s_blocks_count;
+			}
+			bgdesc.bg_free_blocks_count = tb - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 2; 
 		}
 		
 		freebl_usingbgdesc += bgdesc.bg_free_blocks_count;
