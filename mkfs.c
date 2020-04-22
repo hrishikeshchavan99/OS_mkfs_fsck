@@ -93,7 +93,7 @@ int set_datablock_bitmap(int fd, struct ext2_super_block sb, struct ext2_group_d
 	int value;
 	int full_0s = 0;
 	int full_1s = 0xFFFFFFFF;
-	int total_int = sb.s_inodes_per_group / 32;		 
+	int total_int = sb.s_blocks_per_group / 32;
 	
 	for(int block_group = 0; block_group < no_of_groups; block_group++){
 			
@@ -123,8 +123,7 @@ int set_datablock_bitmap(int fd, struct ext2_super_block sb, struct ext2_group_d
 		for(int i = 0; i < no_full_0s; i++){
 			write(fd, &full_0s, sizeof(full_0s));
 		}
-	}
-	
+	}	
 }
 
 int set_inode_bitmap(int fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
@@ -321,7 +320,8 @@ int main(int argc, char *argv[]) {
 	sb.s_prealloc_blocks = 0;	/* Nr of blocks to try to preallocate*/
 	sb.s_prealloc_dir_blocks = 0;	/* Nr to preallocate for dirs */
 	sb.s_reserved_gdt_blocks = 127;	/* Per group table for online growth */
-	sb.s_journal_uuid[16] = 0;	/* uuid of journal superblock */				
+	for(int i =0; i < 16; i++)
+		sb.s_journal_uuid[i] = 0;	/* uuid of journal superblock */				
 	sb.s_journal_inum = 0;		/* inode number of journal file */
 	sb.s_journal_dev = 0;		/* device number of journal file */
 	sb.s_last_orphan = 0;		/* start of list of inodes to delete */
