@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <time.h>
-#include <uuid.h>
+#include <uuid/uuid.h>
 #include <math.h>
 #include <getopt.h>
 
@@ -313,7 +313,7 @@ int main(int argc, char *argv[]) {
 	sb.s_feature_compat = 56;	/* compatible feature set */ //values set after reading the structure
 	sb.s_feature_incompat = 2;	/* incompatible feature set */
 	sb.s_feature_ro_compat = 3;  	/* readonly-compatible feature set */
-	uuid_generate(sb->s_uuid);		/* 128-bit uuid for volume */
+	uuid_generate(sb.s_uuid);		/* 128-bit uuid for volume */
 	sb.s_volume_name[0] = '\0';	/* volume name */
 	sb.s_last_mounted[0] = '\0';	/* directory where last mounted */
 	sb.s_algorithm_usage_bitmap = 0; /* For compression */
@@ -325,7 +325,7 @@ int main(int argc, char *argv[]) {
 	sb.s_journal_inum = 0;		/* inode number of journal file */
 	sb.s_journal_dev = 0;		/* device number of journal file */
 	sb.s_last_orphan = 0;		/* start of list of inodes to delete */
-	uuid_generate((char *)sb->s_hash_seed);		/* HTREE hash seed */
+	uuid_generate((char *)sb.s_hash_seed);		/* HTREE hash seed */
 	sb.s_def_hash_version = 1;	/* Default hash version to use */
 	sb.s_jnl_backup_type = 0; 	/* Default type of journal backup */		
 	sb.s_desc_size = 0;		/* Group desc. size: INCOMPAT_64BIT */
@@ -411,7 +411,7 @@ int main(int argc, char *argv[]) {
 				tb = sb.s_blocks_count % sb.s_blocks_per_group;
 			}
 			else{
-				tb = sb.s_blocks_count;
+				tb = sb.s_blocks_per_group;
 			}
 			bgdesc.bg_free_blocks_count = tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 9;
 		}
@@ -420,7 +420,7 @@ int main(int argc, char *argv[]) {
 				tb = sb.s_blocks_count % sb.s_blocks_per_group;
 			}
 			else{
-				tb = sb.s_blocks_count;
+				tb = sb.s_blocks_per_group;
 			}
 			bgdesc.bg_free_blocks_count = tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 3;
 		}
@@ -429,7 +429,7 @@ int main(int argc, char *argv[]) {
 				tb = sb.s_blocks_count % sb.s_blocks_per_group;
 			}
 			else{
-				tb = sb.s_blocks_count;
+				tb = sb.s_blocks_per_group;
 			}
 			bgdesc.bg_free_blocks_count = tb - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 2; 
 		}
