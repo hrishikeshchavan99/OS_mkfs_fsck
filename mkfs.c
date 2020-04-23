@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	long long int p_size = lseek(fd, 0, SEEK_END);
-	lseek(fd, 1024, SEEK_SET);
+	lseek(fd, 2048, SEEK_SET);
 	
 	//the superblock
 	sb.s_blocks_per_group = block_size * 8;	/* # Blocks per group */
@@ -384,7 +384,6 @@ int main(int argc, char *argv[]) {
 	sb.s_reserved[98] = 0;		/* Padding to the end of the block */
 	sb.s_checksum = 0;		/* crc32c(superblock) */
 	
-	write(fd, &sb, sizeof(struct ext2_super_block));
 	
 	// the block group descriptor table
 	int reqsize_gdt = no_of_groups * 32;
@@ -460,7 +459,11 @@ int main(int argc, char *argv[]) {
 		
 		write(fd, &bgdesc, sizeof(struct ext2_group_desc));
 	}
-			
+	
+	sb.s_free_blocks_count = freebl_usingbgdesc;
+	lseek(fd, 1024, SEEK_SET);
+	write(fd, &sb, sizeof(struct ext2_super_block));
+	
 	duplicate_super_gdt(fd, sb, bgdesc);
 	set_datablock_bitmap(fd, sb, bgdesc);
 	set_inode_bitmap(fd, sb, bgdesc);
