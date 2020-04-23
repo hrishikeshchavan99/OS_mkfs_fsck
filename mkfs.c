@@ -250,19 +250,17 @@ int main(int argc, char *argv[]) {
 	struct ext2_group_desc bgdesc;
 	struct ext2_inode inode;
 	struct ext2_dir_entry_2 dirent;
+	block_size = 4096;
 	
-	
-	while ((c = getopt(argc, argv, "b")) != -1){
-		if(c){
-			block_size = atoi(argv[optind]);
-			dummy = 1;
+	while ((c = getopt(argc, argv, "b:")) != -1){
+		switch(c){
+			case 'b':
+				block_size = atoi(optarg);
+				break;
 		}
 	}
-	if(dummy == 0){
-		block_size = 4096;
-	}
 	
-	int fd = open(argv[1], O_RDONLY | O_WRONLY); 
+	int fd = open(argv[optind], O_RDONLY | O_WRONLY); 
 
 
 	if(fd == -1) {
