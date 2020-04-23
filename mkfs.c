@@ -409,6 +409,8 @@ int main(int argc, char *argv[]) {
 		if(block_group == 0) {
 			if(block_group == no_of_groups-1){
 				tb = sb.s_blocks_count % sb.s_blocks_per_group;
+				if(tb == 0)
+					tb = sb.s_blocks_per_group;
 			}
 			else{
 				tb = sb.s_blocks_per_group;
@@ -418,6 +420,8 @@ int main(int argc, char *argv[]) {
 		else if(block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {
 			if(block_group == no_of_groups-1){
 				tb = sb.s_blocks_count % sb.s_blocks_per_group;
+				if(tb == 0)
+					tb = sb.s_blocks_per_group;
 			}
 			else{
 				tb = sb.s_blocks_per_group;
@@ -427,6 +431,8 @@ int main(int argc, char *argv[]) {
 		else{
 			if(block_group == no_of_groups-1){
 				tb = sb.s_blocks_count % sb.s_blocks_per_group;
+				if(tb == 0)
+					tb = sb.s_blocks_per_group;
 			}
 			else{
 				tb = sb.s_blocks_per_group;
