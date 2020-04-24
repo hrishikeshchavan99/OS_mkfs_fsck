@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -245,12 +246,12 @@ int write_datablocks(int fd, struct ext2_super_block sb, struct ext2_group_desc 
 int main(int argc, char *argv[]) {
 	
 	int c;
-	int dummy = 0;
+	block_size = 4096;
 	struct ext2_super_block sb; 
 	struct ext2_group_desc bgdesc;
 	struct ext2_inode inode;
 	struct ext2_dir_entry_2 dirent;
-	block_size = 4096;
+	
 	
 	while ((c = getopt(argc, argv, "b:")) != -1){
 		switch(c){
@@ -261,20 +262,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	int fd = open(argv[optind], O_RDONLY | O_WRONLY); 
-	
-	if(block_size > 4096){
-		block_size = 4096;
-	}
-	else if(2048 < block_size < 4096){
-		block_size = 2048;
-	}
-	else if (1024 < block_size < 2048){
-		block_size = 1024;
-	}
-	else if(block_size < 1024){
-		perror("error: Invalid block_size");
-	}
-	
+
 
 	if(fd == -1) {
 		perror("error:");
@@ -282,10 +270,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	long long int p_size = lseek(fd, 0, SEEK_END);
-	if(block_size == 1024)
-		lseek(fs, , SEEK_SET);
-	else
-		lseek(fd, 2048, SEEK_SET);
+	lseek(fd, 2048, SEEK_SET);
 	
 	//the superblock
 	sb.s_blocks_per_group = block_size * 8;	/* # Blocks per group */
@@ -333,7 +318,10 @@ int main(int argc, char *argv[]) {
 	sb.s_algorithm_usage_bitmap = 0; /* For compression */
 	sb.s_prealloc_blocks = 0;	/* Nr of blocks to try to preallocate*/
 	sb.s_prealloc_dir_blocks = 0;	/* Nr to preallocate for dirs */
-	sb.s_reserved_gdt_blocks = 127;	/* Per group table for online growth */
+	if(block_size == 4096)
+		sb.s_reserved_gdt_blocks = 127;	/* Per group table for online growth */
+	else if(block_size == 2048)
+		sb.s_reserved_gdt_blocks = 512;
 	for(int i =0; i < 16; i++)
 		sb.s_journal_uuid[i] = 0;	/* uuid of journal superblock */				
 	sb.s_journal_inum = 0;		/* inode number of journal file */
@@ -398,7 +386,7 @@ int main(int argc, char *argv[]) {
 	sb.s_reserved[98] = 0;		/* Padding to the end of the block */
 	sb.s_checksum = 0;		/* crc32c(superblock) */
 	
-	
+		
 	// the block group descriptor table
 	int reqsize_gdt = no_of_groups * 32;
 	gdt_blocksize = ceil((float)reqsize_gdt / block_size);
@@ -429,6 +417,8 @@ int main(int argc, char *argv[]) {
 				tb = sb.s_blocks_per_group;
 			}
 			bgdesc.bg_free_blocks_count = tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 9;
+			if(block_size == 2048)
+				bgdesc.bg_free_blocks_count -= 4;
 		}
 		else if(block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {
 			if(block_group == no_of_groups-1){
@@ -490,3 +480,4 @@ int main(int argc, char *argv[]) {
 	return 0;
 	
 }		
+
