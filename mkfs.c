@@ -261,7 +261,20 @@ int main(int argc, char *argv[]) {
 	}
 	
 	int fd = open(argv[optind], O_RDONLY | O_WRONLY); 
-
+	
+	if(block_size > 4096){
+		block_size = 4096;
+	}
+	else if(2048 < block_size < 4096){
+		block_size = 2048;
+	}
+	else if (1024 < block_size < 2048){
+		block_size = 1024;
+	}
+	else if(block_size < 1024){
+		perror("error: Invalid block_size");
+	}
+	
 
 	if(fd == -1) {
 		perror("error:");
@@ -269,7 +282,10 @@ int main(int argc, char *argv[]) {
 	}
 	
 	long long int p_size = lseek(fd, 0, SEEK_END);
-	lseek(fd, 2048, SEEK_SET);
+	if(block_size == 1024)
+		lseek(fs, , SEEK_SET);
+	else
+		lseek(fd, 2048, SEEK_SET);
 	
 	//the superblock
 	sb.s_blocks_per_group = block_size * 8;	/* # Blocks per group */
