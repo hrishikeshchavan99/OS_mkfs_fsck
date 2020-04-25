@@ -30,10 +30,7 @@ Part completed:
 2. FSCK, not complete
 - Superblock checked
 - Block group descriptors checked
-- Code for constructing the tree is ready. 
-- Facing problems with finding DID, DDID inode numbers
-- Block/Inode bitmap not done
+- Tree DS is used to create FS, it is not yet complete
 - no specific command to run the code
-
 
 Zip folder having the screenshots has been uploaded
