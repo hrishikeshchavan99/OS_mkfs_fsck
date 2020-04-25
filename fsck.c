@@ -7,9 +7,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <string.h>
 #include <time.h>
-#include <uuid.h>
+#include <uuid/uuid.h>
 #include <math.h>
+#include <getopt.h>
 
 
 
@@ -25,7 +27,7 @@ typedef struct node {
 }node;
 
 typedef node *tree;
-
+/*
 int addnode(node *root, int inode_no, int no_of_children, int level){
 	node *current_node;
 	current_node = root;	
@@ -40,7 +42,7 @@ int addnode(node *root, int inode_no, int no_of_children, int level){
 		}
 	}
 }	
-
+*/
 int ispowerof(int n, int k){
 	
 	while (n != 1){
@@ -66,31 +68,27 @@ int read_bgdesc(int fd, struct ext2_group_desc* bgdesc, int group_no){
 
 int main(int argc, char *argv[]) {
 	int fd = open(argv[1], O_RDONLY); // argv[1] = /dev/sdb1 
-	
-	int count, bs = 4096, i = 0;
+
+	int count, i = 0;	
 	struct ext2_super_block sb; 
 	struct ext2_group_desc bgdesc;
 	struct ext2_inode inode;
 	struct ext2_dir_entry_2 dirent;
-	unsigned int block_size;
+	unsigned int block_size = 4096;
 
 	int flag = 0, flag2 = 0;
-	no_of_groups = ceil((float)sb.s_blocks_count / sb.s_blocks_per_group);
-
 	if(fd == -1) {
 		perror("error:");
 		exit(errno);
 	}
-	
-	int curr_pos = lseek(fd, 0, SEEK_CUR);
-	int p_size;
-	p_size = lseek(fd, 0, SEEK_END);
-	lseek(fd, curr_pos, SEEK_SET);	
 
+
+	long long int p_size = lseek(fd, 0, SEEK_END);
+	
+	lseek(fd, 1024, SEEK_SET);
 	count = read(fd, &sb, sizeof(struct ext2_super_block));
-
-
 	
+	no_of_groups = ceil((float)sb.s_blocks_count / sb.s_blocks_per_group);
 
 	//checking consistency of block groups
 	if(block_size == 1024)
@@ -115,33 +113,33 @@ int main(int argc, char *argv[]) {
 			if(block_size == 1024)
 				if (bgdesc.bg_block_bitmap != initial + 1 + 1 + gdt_blocksize + sb.s_reserved_gdt_blocks){
 					flag2++;
-					printf();
+					printf("Error in bgd block bitmap\n");
 				}
 			else
 				if (bgdesc.bg_block_bitmap != initial + 1 + gdt_blocksize + sb.s_reserved_gdt_blocks){
 					flag2++;
-					printf();
+					printf("Error in bgd block bitmap\n");
 				}
 		} else{
 			if(block_size == 1024)
 				if (bgdesc.bg_block_bitmap !=  initial + 1){
 					flag2++;
-					printf();
+					printf("Error in bgd block bitmap\n");
 				}
 			else	
 				if (bgdesc.bg_block_bitmap !=  initial){
 					flag2++;
-					printf();
+					printf("Error in bgd block bitmap\n");
 				}
 		}
 			
 		if (bgdesc.bg_inode_bitmap != bgdesc.bg_block_bitmap + 1){
 					flag2++;
-					printf();
+					printf("Error in bgd inode bitmap\n");
 		}
 		if (bgdesc.bg_inode_table != bgdesc.bg_inode_bitmap + 1){
 					flag2++;
-					printf();
+					printf("Error in bgd inode table\n");
 		}
 		
 		if(block_group == 0) {
@@ -155,7 +153,7 @@ int main(int argc, char *argv[]) {
 			}
 			if (bgdesc.bg_free_blocks_count != tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 9){
 					flag2++;
-					printf();
+					printf("Error in bgd free block count\n");
 			}
 			
 			if(block_size == 1024)
@@ -174,7 +172,7 @@ int main(int argc, char *argv[]) {
 			}
 			if (bgdesc.bg_free_blocks_count != tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 3){
 					flag2++;
-					printf();
+					printf("Error in bgd free block count\n");
 			}
 		
 		}
@@ -189,7 +187,7 @@ int main(int argc, char *argv[]) {
 			}
 			if (bgdesc.bg_free_blocks_count != tb - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 2){
 					flag2++;
-					printf();
+					printf("Error in bgd free block count\n");
 			} 
 			
 		}
@@ -199,16 +197,17 @@ int main(int argc, char *argv[]) {
 		if (block_group == 0){		
 			if (bgdesc.bg_free_inodes_count != sb.s_inodes_per_group - 11){
 					flag2++;
-					printf();
+					printf("Error in bgd free inode count\n");
 			}
 		}			
 		else { 
 			if (bgdesc.bg_free_inodes_count != sb.s_inodes_per_group){
 					flag2++;
-					printf();
+					printf("Error in bgd free inode count\n");
 			}			
 		}
-		
+		if (flag2 != 0)
+			printf("Block group descriptor is not clean\n");
 		
 		
 	}
@@ -220,60 +219,59 @@ int main(int argc, char *argv[]) {
 	unsigned int inodes_count = sb.s_inodes_per_group * no_of_groups;
 	if (sb.s_inodes_count == inodes_count)
 		//ok
-	if (sb.s_blocks_per_group == bs * 8);
-	if (sb.s_blocks_count == p.size / bs);				
+	if (sb.s_blocks_per_group == block_size * 8);
+	if (sb.s_blocks_count == p_size / block_size);				
 
 //	unsigned int no_of_groups = ceil((float)sb.s_blocks_count / sb.s_blocks_per_group);
 														
-	unsigned int inode_bpg = bs / 8;	
-												
-	if (sb.s_inodes_per_group != inode_bpg * bs / sb.s_inode_size){
+	unsigned int inode_bpg = block_size / 8;	
+	if (sb.s_inodes_per_group != inode_bpg * block_size / sb.s_inode_size){
 		flag++;
-		printf();
+		printf("Error in superblock inode per group\n");
 	}
 	if (sb.s_inodes_count == sb.s_inodes_per_group * no_of_groups){
 		flag++;
-		printf();
+		printf("Error in superblock inodes count\n");
 	}
 	
 	if (sb.s_r_blocks_count == (5 * sb.s_blocks_count) / 100){
 		flag++;
-		printf();
+		printf("Error in superblock reserved block count\n");
 	}
 
 	if (sb.s_free_blocks_count != freebl_usingbgdesc){
 		flag++;
-		printf();
+		printf("Error in superblock free block count\n");
 	}
 
 	if (sb.s_free_inodes_count == sb.s_inodes_count - 11){
 		flag++;
-		printf();
+		printf("Error in superblock free inode count\n");
 	}
 
-	if (sb.s_log_block_size == bs >> 11){
+	if (sb.s_log_block_size == block_size >> 11){
 		flag++;
-		printf();
+		printf("Error in superblock log block size\n");
 	}
-	if (sb.s_log_cluster_size == bs >> 11){
+	if (sb.s_log_cluster_size == block_size >> 11){
 		flag++;
-		printf();
+		printf("Error in superblock log cluster size\n");
 	}
 
 	if (sb.s_clusters_per_group == sb.s_blocks_per_group){
 		flag++;
-		printf();
+		printf("Error in superblock cluster per group\n");
 	}
 	
 	if(sb.s_log_block_size)
 		if (sb.s_first_data_block != 0){
 		flag++;
-		printf();
+		printf("Error in superblock first data block index\n");
 	}
 	else
 		if (sb.s_first_data_block != 1){
 		flag++;
-		printf();
+		printf("Error in superblock first data block index\n");
 	}
 
 	if (flag != 0){
@@ -312,7 +310,7 @@ for(int i = 0; i < inode_blocks; i++){
 }
 if(inode.i_links_count == 2)
 //end
-/*
+*/
 }
 
 
