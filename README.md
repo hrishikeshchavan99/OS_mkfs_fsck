@@ -18,7 +18,7 @@ Part completed:
 - Mkfs runs and is tested on a 2GB aand 8 GB partition.
 - Block sizes considered- 1,2,4k
 - Mounts in all the three cases with -b option
-- Attaching screenshots of the following three cases:
+- Attaching screenshots of the following three cases: (To differentiate between the screenshots, the mount options filed has been         deliberately set to 0 in our code)
     - 2GB partition, Block size 1K
     - 2GB partition, Block size 4k
     - 8GB partition, Block size 2k
