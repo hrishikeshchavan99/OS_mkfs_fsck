@@ -11,10 +11,35 @@
 #include <uuid.h>
 #include <math.h>
 
+
+
 int block_size;
 int no_of_groups;
 int gdt_blocksize;
 long long int freebl_usingbgdesc;
+
+typedef struct node {
+	int inode_no;
+	int no_of_children, level;
+	struct node  **child;
+}node;
+
+typedef node *tree;
+
+int addnode(node *root, int inode_no, int no_of_children, int level){
+	node *current_node;
+	current_node = root;	
+	int i;	
+	for (i = 0; i < current_node->no_of_children; i++){
+		current_node->child[i] = (node *)malloc(sizeof(node));
+		current_node->child[i]->inode_no = 0;   //to be changed later
+		current_node->child[i]->no_of_children = 3;
+		current_node->child[i]->level = 1;	
+		if (current_node->no_of_children != 0){
+			addnode(current_node->child[i]->inode_no, current_node->child[i]->no_of_children, current_node->child[i]->level);
+		}
+	}
+}	
 
 int ispowerof(int n, int k){
 	
@@ -254,4 +279,40 @@ int main(int argc, char *argv[]) {
 	if (flag != 0){
 		printf("Superblock is not clean\n");
 	}
+
+/*
+//inode number as input
+
+
+	int children, lvl = 0, i = 0;
+	node *root, *current_node;
+
+	current_node = root;
+
+	//creating root node
+	root = (node *)malloc(sizeof(node));
+	root -> inode_no = 0;   //to be changed later
+	root -> no_of_children = 3;
+	root -> level = 0;
+
+	
+	addnode(root, inode_no, no_of_children, level);
+
+
+read_bgdesc(fd, &bgdesc, group_no);
+lseek(fd, bgdesc.bg_inode_table * block_size + (inode_no - 1) * 256, SEEK_SET);
+read(fd, &inode, sizeof(struct ext2_inode));
+int inode_blocks = inode.i_blocks;
+for(int i = 0; i < inode_blocks; i++){
+	lseek(fd, inode.i_block[i] * block_size, SEEK_SET);
+	while(fd != (fd + block_size)){
+		read(fd, &dirent, sizeof(struct ext2_dir_entry_2));
+		dirent.inode
+	}
+}
+if(inode.i_links_count == 2)
+//end
+/*
+}
+
 
