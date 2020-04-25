@@ -44,8 +44,12 @@ int ispowerof(int n, int k){
 }
 
 int read_bgdesc(int fd, struct ext2_group_desc* bgdesc, int group_no){	
+	
+	if(block_size == 1024)
+		lseek(fd, 2*block_size + group_no * sizeof(struct ext2_group_desc), SEEK_SET);
+	else
+		lseek(fd, block_size + group_no * sizeof(struct ext2_group_desc), SEEK_SET);
 
-	lseek(fd, block_size + group_no * sizeof(struct ext2_group_desc), SEEK_SET);
 	read(fd, &bgdesc, sizeof(struct ext2_group_desc));
 	
 	return 0;
@@ -260,23 +264,28 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
-	
-	if(block_size > 4096)
-		block_size = 4096;
-	else if(2048 < block_size && block_size < 4096)
-		block_size = 2048;
-	else if(1024 < block_size && block_size < 4096)
-		block_size = 1024;
+
+	if((block_size == 1024) || (block_size == 2048) || (block_size == 4096))
+		;
 	else{
-		perror("error : block size not valid");
-		exit(errno);
+	
+		if(block_size > 4096)
+			block_size = 4096;
+		else if(2048 < block_size && block_size < 4096)
+			block_size = 2048;
+		else if(1024 < block_size && block_size < 2048)
+			block_size = 1024;
+		else{
+			perror("error : block size not valid");
+			exit(errno);
+		}
 	}
 	int fd = open(argv[optind], O_RDONLY | O_WRONLY); 
 
 
 	if(fd == -1) {
 		perror("error:");
-		exit(errno);
+		exit(errno); 
 	}
 	
 	long long int p_size = lseek(fd, 0, SEEK_END);
@@ -332,6 +341,8 @@ int main(int argc, char *argv[]) {
 		sb.s_reserved_gdt_blocks = 127;	/* Per group table for online growth */
 	else if(block_size == 2048)
 		sb.s_reserved_gdt_blocks = 512;
+	else
+		sb.s_reserved_gdt_blocks = 256;		
 	for(int i =0; i < 16; i++)
 		sb.s_journal_uuid[i] = 0;	/* uuid of journal superblock */				
 	sb.s_journal_inum = 0;		/* inode number of journal file */
