@@ -261,6 +261,16 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	
+	if(block_size > 4096)
+		block_size = 4096;
+	else if(2048 < block_size && block_size < 4096)
+		block_size = 2048;
+	else if(1024 < block_size && block_size < 4096)
+		block_size = 1024;
+	else{
+		perror("error : block size not valid");
+		exit(errno);
+	}
 	int fd = open(argv[optind], O_RDONLY | O_WRONLY); 
 
 
