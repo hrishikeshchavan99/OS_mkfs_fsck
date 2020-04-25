@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -51,12 +50,10 @@ int read_bgdesc(int fd, struct ext2_group_desc* bgdesc, int group_no){
 		lseek(fd, block_size + group_no * sizeof(struct ext2_group_desc), SEEK_SET);
 
 	read(fd, &bgdesc, sizeof(struct ext2_group_desc));
-	
 	return 0;
 }	
 	
 int duplicate_super_gdt(int fd, struct ext2_super_block sb, struct ext2_group_desc bgdesc){
-	
 	for (int block_group = 1; block_group < no_of_groups; block_group++){		
 	
 		if (block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)){		
@@ -65,17 +62,13 @@ int duplicate_super_gdt(int fd, struct ext2_super_block sb, struct ext2_group_de
 			write(fd, &sb, sizeof(struct ext2_super_block));
 			
 			for(int i = 0; i < no_of_groups; i++){
-				
 				read_bgdesc(fd, &bgdesc, i);
 				lseek(fd, block_group * sb.s_blocks_per_group * block_size + block_size,SEEK_SET);
 				lseek(fd, i * sizeof(struct ext2_group_desc), SEEK_CUR);
 				write(fd, &bgdesc, sizeof(struct ext2_group_desc));	
-				
 			}
-								
 		}				
 	}	
-	
 	return 0;
 }
 
@@ -106,13 +99,19 @@ int set_datablock_bitmap(int fd, struct ext2_super_block sb, struct ext2_group_d
 		lseek(fd, bgdesc.bg_block_bitmap * block_size, SEEK_SET);
 				
 		if(block_group == 0){
-			value = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) + 5;
+			value = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) + 6;
+			if(block_size == 1024)
+				value += 1;
 		}
 		else if (block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)){
 			value = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);
+			if(block_size == 1024)
+				value += 1;
 		}
 		else {
 			value = 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);
+			if(block_size == 1024)
+				value += 1;
 		}
 				
 		no_full_1s = value / 32;
@@ -181,14 +180,21 @@ int write_inodetable(int fd, int inode_no, struct ext2_super_block sb, struct ex
 	inode->osd1.linux1.l_i_version = 0;
 	inode->osd1.hurd1.h_i_translator = 0;
 	
-	if (inode_no == 2){			
-		inode->i_block[0] = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size); 
+	if (inode_no == 2){
+		if(block_size == 1024){
+			inode->i_block[0] = 2 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);
+		}
+		else
+			inode->i_block[0] = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size); 
 	}
 	else if (inode_no == 11){
-		inode->i_block[0] = 1 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) + 1;    
+		if(block_size == 1024)
+			inode->i_block[0] = 3 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);
+		else
+			inode->i_block[0] = 2 + gdt_blocksize + sb.s_reserved_gdt_blocks + 1 + 1 + ((sb.s_inodes_per_group * sb.s_inode_size) / block_size);    
 		inode->i_block[1] = inode->i_block[0] + 1;	
-		inode->i_block[2] = inode->i_block[0] + 2;	
-		inode->i_block[3] = inode->i_block[0] + 3;
+		inode->i_block[2] = inode->i_block[1] + 1;	
+		inode->i_block[3] = inode->i_block[2] + 1;
 	}
 	
 	inode->i_generation = 0;	
@@ -268,7 +274,6 @@ int main(int argc, char *argv[]) {
 	if((block_size == 1024) || (block_size == 2048) || (block_size == 4096))
 		;
 	else{
-	
 		if(block_size > 4096)
 			block_size = 4096;
 		else if(2048 < block_size && block_size < 4096)
@@ -289,7 +294,6 @@ int main(int argc, char *argv[]) {
 	}
 	
 	long long int p_size = lseek(fd, 0, SEEK_END);
-	lseek(fd, 2048, SEEK_SET);
 	
 	//the superblock
 	sb.s_blocks_per_group = block_size * 8;	/* # Blocks per group */
@@ -305,25 +309,27 @@ int main(int argc, char *argv[]) {
 	sb.s_r_blocks_count = (5 * sb.s_blocks_count) / 100;	   /* Reserved blocks count */
 	sb.s_free_blocks_count = freebl_usingbgdesc; 			/* Free blocks count */
 	sb.s_free_inodes_count = sb.s_inodes_count - 11;	/* Free inodes count */
-	if(block_size > 1024)
+	sb.s_log_block_size = block_size >> 11;	/* Block size */ //blocksize = 1024 << s_log_block_size
+	sb.s_log_cluster_size = block_size >> 11;	/* Allocation cluster size */
+	
+	if(sb.s_log_block_size)
 		sb.s_first_data_block = 0;    // 	/* First Data Block */
 	else
 		sb.s_first_data_block = 1;
-	sb.s_log_block_size = block_size >> 11;	/* Block size */ //blocksize = 1024 << s_log_block_size
-	sb.s_log_cluster_size = block_size >> 11;	/* Allocation cluster size */
+	
 	sb.s_clusters_per_group = sb.s_blocks_per_group;	/* # Fragments per group */	
 	sb.s_mtime = 0;		/* Mount time */
 	sb.s_wtime = time(NULL);		/* Write time */
 	sb.s_mnt_count = 0;		/* Mount count */
 	sb.s_max_mnt_count = -1;	/* Maximal mount count */
 	sb.s_magic = EXT2_SUPER_MAGIC;		/* Magic signature */
-	sb.s_state = 1;		/* File system state */
-	sb.s_errors = 1;		/* Behaviour when detecting errors */
+	sb.s_state = EXT2_VALID_FS;		/* File system state */
+	sb.s_errors = EXT2_ERRORS_CONTINUE;		/* Behaviour when detecting errors */
 	sb.s_minor_rev_level = 0;	/* minor revision level */
 	sb.s_lastcheck = time(NULL);		/* time of last check */
 	sb.s_checkinterval = 0;	/* max. time between checks */
-	sb.s_creator_os = 0;		/* OS */
-	sb.s_rev_level = 1;		/* Revision level */
+	sb.s_creator_os = EXT2_OS_LINUX;		/* OS */
+	sb.s_rev_level = EXT2_DYNAMIC_REV;		/* Revision level */
 	sb.s_def_resuid = 0; 	/* Default uid for reserved blocks */
 	sb.s_def_resgid = 0; 	/* Default gid for reserved blocks */
 	sb.s_first_ino = 11;		/* First non-reserved inode */
@@ -352,7 +358,7 @@ int main(int argc, char *argv[]) {
 	sb.s_def_hash_version = 1;	/* Default hash version to use */
 	sb.s_jnl_backup_type = 0; 	/* Default type of journal backup */		
 	sb.s_desc_size = 0;		/* Group desc. size: INCOMPAT_64BIT */
-	sb.s_default_mount_opts = 0;
+	sb.s_default_mount_opts = 12;
 	sb.s_first_meta_bg = 0;	/* First metablock group */
 	sb.s_mkfs_time = time(NULL);		/* When the filesystem was created */
 	
@@ -408,6 +414,11 @@ int main(int argc, char *argv[]) {
 	sb.s_checksum = 0;		/* crc32c(superblock) */
 	
 		
+	if(block_size == 1024)
+		lseek(fd, 2048, SEEK_SET);
+	else
+		lseek(fd, block_size,SEEK_SET);
+		
 	// the block group descriptor table
 	int reqsize_gdt = no_of_groups * 32;
 	gdt_blocksize = ceil((float)reqsize_gdt / block_size);
@@ -418,11 +429,18 @@ int main(int argc, char *argv[]) {
 		
 		long long int initial = block_group * sb.s_blocks_per_group;
 		
-		if (block_group == 0 || block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {
-			bgdesc.bg_block_bitmap = initial + 1 + gdt_blocksize + sb.s_reserved_gdt_blocks;
+		if (block_group == 0 || block_group == 1 || ispowerof(block_group, 3) || ispowerof(block_group, 5) || ispowerof(block_group, 7)) {	
+			if(block_size == 1024)
+				bgdesc.bg_block_bitmap = initial + 1 + 1 + gdt_blocksize + sb.s_reserved_gdt_blocks;
+			else
+				bgdesc.bg_block_bitmap = initial + 1 + gdt_blocksize + sb.s_reserved_gdt_blocks;
 		} else{
-			bgdesc.bg_block_bitmap =  initial;
+			if(block_size == 1024)
+				bgdesc.bg_block_bitmap =  initial + 1;
+			else	
+				bgdesc.bg_block_bitmap =  initial;
 		}
+		
 		
 		
 		bgdesc.bg_inode_bitmap = bgdesc.bg_block_bitmap + 1;
@@ -438,6 +456,9 @@ int main(int argc, char *argv[]) {
 				tb = sb.s_blocks_per_group;
 			}
 			bgdesc.bg_free_blocks_count = tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 9;
+			
+			if(block_size == 1024)
+				bgdesc.bg_free_blocks_count -= 9;
 			if(block_size == 2048)
 				bgdesc.bg_free_blocks_count -= 4;
 		}
@@ -451,6 +472,7 @@ int main(int argc, char *argv[]) {
 				tb = sb.s_blocks_per_group;
 			}
 			bgdesc.bg_free_blocks_count = tb - gdt_blocksize - sb.s_reserved_gdt_blocks - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 3;
+		
 		}
 		else{
 			if(block_group == no_of_groups-1){
@@ -462,6 +484,7 @@ int main(int argc, char *argv[]) {
 				tb = sb.s_blocks_per_group;
 			}
 			bgdesc.bg_free_blocks_count = tb - ((sb.s_inodes_per_group * sb.s_inode_size) / block_size) - 2; 
+			
 		}
 		
 		freebl_usingbgdesc += bgdesc.bg_free_blocks_count;
@@ -501,4 +524,5 @@ int main(int argc, char *argv[]) {
 	return 0;
 	
 }		
+
 
